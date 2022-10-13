@@ -1,8 +1,18 @@
 import attr
-import minerl.herobraine.hero.mc as mc
+import os
+import json
 import numpy as np
 
 from lib.minecraft_util import store_args
+
+
+# We copied the mc_constants.1.16.json file to completely remove dependencies on minerl
+mc_constants_file = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "mc_constants.1.16.json"
+)
+all_data = json.load(open(mc_constants_file))
+ALL_ITEMS = [item["type"] for item in all_data["items"]]
+MINERL_ITEM_MAP = sorted(["none"] + ALL_ITEMS)
 
 
 class Buttons:
@@ -130,7 +140,7 @@ class ActionTransformer:
         return self.quantizer.undiscretize(pq)
 
     def item_embed_id_to_name(self, item_id):
-        return mc.MINERL_ITEM_MAP[item_id]
+        return MINERL_ITEM_MAP[item_id]
 
     def dict_to_numpy(self, acs):
         """
