@@ -122,6 +122,7 @@ class MinecraftPolicy(nn.Module):
         recurrence_is_residual=True,
         timesteps=None,
         use_pre_lstm_ln=True,  # Not needed for transformer
+        use_adapters=False,
         **unused_kwargs,
     ):
         super().__init__()
@@ -182,6 +183,7 @@ class MinecraftPolicy(nn.Module):
             attention_heads=attention_heads,
             attention_memory_size=attention_memory_size,
             n_block=n_recurrence_layers,
+            use_adapters=use_adapters,
         )
 
         self.lastlayer = FanInInitReLULayer(hidsize, hidsize, layer_type="linear", **self.dense_init_norm_kwargs)

@@ -10,6 +10,22 @@ from lib.minecraft_util import store_args
 from lib.tree_util import tree_map
 
 
+class Adapter(nn.Module):
+    def __init__(self, size: int, reduction_factor: int = 16, init_std: float = .01):
+        super().__init__()
+        self.down_project = nn.Linear(size, size//reduction_factor)
+        self.activation = nn.SiLU()
+        self.up_project = nn.Linear(size//reduction_factor, size)
+
+        self.down_project.weight.data.normal_(mean=0, std=init_std)
+        self.down_project.bias.data.zero_()
+        self.up_project.weight.data.normal_(mean=0, std=init_std)
+        self.up_project.bias.data.zero_()
+
+    def forward(self, x):
+        return x + self.up_project(self.activation(self.down_project(x)))
+
+
 def get_module_log_keys_recursive(m: nn.Module):
     """Recursively get all keys that a module and its children want to log."""
     keys = []
@@ -146,6 +162,7 @@ class ResidualRecurrentBlock(nn.Module):
         attention_mask_style="clipped_causal",
         log_scope="resblock",
         block_number=0,
+        use_adapters=False,
     ):
         super().__init__()
         self.log_scope = f"{log_scope}{block_number}"
@@ -188,7 +205,12 @@ class ResidualRecurrentBlock(nn.Module):
                 log_scope=log_scope + "/sa",
                 use_muP_factor=True,
                 mask=attention_mask_style,
+                use_adapters=self.use_adapters
             )
+
+        self.use_adapters = use_adapters
+        if self.use_adapters:
+            self.adapter = Adapter(hidsize)
 
     def forward(self, x, first, state):
         residual = x
@@ -206,6 +228,8 @@ class ResidualRecurrentBlock(nn.Module):
             # Residual MLP
             residual = x
             x = self.mlp1(self.mlp0(x))
+            if self.use_adapters:
+                x = self.adapter(x)
             if self.is_residual:
                 x = x + residual
         return x, state_out

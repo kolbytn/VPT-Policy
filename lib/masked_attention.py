@@ -128,6 +128,7 @@ class MaskedAttention(nn.Module):
         norm="none",
         log_scope="sa",
         use_muP_factor=False,
+        use_adapters=False,
     ):
         super().__init__()
 
@@ -148,6 +149,7 @@ class MaskedAttention(nn.Module):
             norm=norm,
             log_scope=log_scope,
             use_muP_factor=use_muP_factor,
+            use_adapters=use_adapters
         )
 
     def initial_state(self, batchsize: int, device=None):
