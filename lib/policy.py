@@ -14,7 +14,7 @@ from lib.impala_cnn import ImpalaCNN
 from lib.normalize_ewma import NormalizeEwma
 from lib.scaled_mse_head import ScaledMSEHead
 from lib.tree_util import tree_map
-from lib.util import FanInInitReLULayer, ResidualRecurrentBlocks
+from lib.util import FanInInitReLULayer, ResidualRecurrentBlocks, Adapter
 from lib.misc import transpose
 
 
@@ -122,7 +122,8 @@ class MinecraftPolicy(nn.Module):
         recurrence_is_residual=True,
         timesteps=None,
         use_pre_lstm_ln=True,  # Not needed for transformer
-        use_adapters=False,
+        transformer_adapters=False,
+        final_adapter=False,
         **unused_kwargs,
     ):
         super().__init__()
@@ -183,11 +184,15 @@ class MinecraftPolicy(nn.Module):
             attention_heads=attention_heads,
             attention_memory_size=attention_memory_size,
             n_block=n_recurrence_layers,
-            use_adapters=use_adapters,
+            use_adapters=transformer_adapters,
         )
 
         self.lastlayer = FanInInitReLULayer(hidsize, hidsize, layer_type="linear", **self.dense_init_norm_kwargs)
         self.final_ln = th.nn.LayerNorm(hidsize)
+
+        self.final_adapter = final_adapter
+        if self.final_adapter:
+            self.adapter = Adapter(hidsize)
 
     def output_latent_size(self):
         return self.hidsize
@@ -213,6 +218,8 @@ class MinecraftPolicy(nn.Module):
         x = F.relu(x, inplace=False)
 
         x = self.lastlayer(x)
+        if self.final_adapter:
+            x = self.adapter(x)
         x = self.final_ln(x)
         pi_latent = vf_latent = x
         if self.single_output:
@@ -229,12 +236,22 @@ class MinecraftPolicy(nn.Module):
 class MinecraftAgentPolicy(nn.Module):
     def __init__(self, action_space, policy_kwargs, pi_head_kwargs):
         super().__init__()
+        self.policy_adapter = policy_kwargs.pop("policy_adapter", False)
         self.net = MinecraftPolicy(**policy_kwargs)
 
         self.action_space = action_space
 
         self.value_head = self.make_value_head(self.net.output_latent_size())
         self.pi_head = self.make_action_head(self.net.output_latent_size(), **pi_head_kwargs)
+
+        if self.policy_adapter:
+            if isinstance(self.action_space, DictType):
+                self.adapter = nn.ModuleDict({
+                    k: Adapter(self.net.output_latent_size(), out_size=v.eltype.n)
+                    for k, v in self.action_space.items()
+                })
+            else:
+                self.adapter = Adapter(self.net.output_latent_size(), out_size=self.action_space.eltype.n)
 
     def make_value_head(self, v_out_size: int, norm_type: str = "ewma", norm_kwargs: Optional[Dict] = None):
         return ScaledMSEHead(v_out_size, 1, norm_type=norm_type, norm_kwargs=norm_kwargs)
@@ -267,6 +284,12 @@ class MinecraftAgentPolicy(nn.Module):
 
         pi_logits = self.pi_head(pi_h, mask=mask)
         vpred = self.value_head(v_h)
+
+        if self.policy_adapter:
+            if isinstance(self.action_space, DictType):
+                pi_logits = {k: v + self.adapter[k](pi_h, residual=False).unsqueeze(2) for k, v in pi_logits.items()}
+            else:
+                pi_logits = pi_logits + self.adapter(pi_h, residual=False).unsqueeze(2)
 
         return (pi_logits, vpred, None), state_out
 
