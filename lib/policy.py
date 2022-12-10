@@ -14,8 +14,9 @@ from lib.impala_cnn import ImpalaCNN
 from lib.normalize_ewma import NormalizeEwma
 from lib.scaled_mse_head import ScaledMSEHead
 from lib.tree_util import tree_map
-from lib.util import FanInInitReLULayer, ResidualRecurrentBlocks, Adapter
+from lib.util import FanInInitReLULayer, ResidualRecurrentBlocks
 from lib.misc import transpose
+from lib.adapter import Adapter
 
 
 class ImgPreprocessing(nn.Module):
@@ -236,22 +237,13 @@ class MinecraftPolicy(nn.Module):
 class MinecraftAgentPolicy(nn.Module):
     def __init__(self, action_space, policy_kwargs, pi_head_kwargs):
         super().__init__()
-        self.policy_adapter = policy_kwargs.pop("policy_adapter", False)
+        pi_head_kwargs["policy_adapter"] = policy_kwargs.pop("policy_adapter", False)
         self.net = MinecraftPolicy(**policy_kwargs)
 
         self.action_space = action_space
 
         self.value_head = self.make_value_head(self.net.output_latent_size())
         self.pi_head = self.make_action_head(self.net.output_latent_size(), **pi_head_kwargs)
-
-        if self.policy_adapter:
-            if isinstance(self.action_space, DictType):
-                self.adapter = nn.ModuleDict({
-                    k: Adapter(self.net.output_latent_size(), out_size=v.eltype.n)
-                    for k, v in self.action_space.items()
-                })
-            else:
-                self.adapter = Adapter(self.net.output_latent_size(), out_size=self.action_space.eltype.n)
 
     def make_value_head(self, v_out_size: int, norm_type: str = "ewma", norm_kwargs: Optional[Dict] = None):
         return ScaledMSEHead(v_out_size, 1, norm_type=norm_type, norm_kwargs=norm_kwargs)
@@ -284,12 +276,6 @@ class MinecraftAgentPolicy(nn.Module):
 
         pi_logits = self.pi_head(pi_h, mask=mask)
         vpred = self.value_head(v_h)
-
-        if self.policy_adapter:
-            if isinstance(self.action_space, DictType):
-                pi_logits = {k: v + self.adapter[k](pi_h, residual=False).unsqueeze(2) for k, v in pi_logits.items()}
-            else:
-                pi_logits = pi_logits + self.adapter(pi_h, residual=False).unsqueeze(2)
 
         return (pi_logits, vpred, None), state_out
 

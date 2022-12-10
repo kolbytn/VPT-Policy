@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from gym3.types import DictType, Discrete, Real, TensorType, ValType
 
+from lib.adapter import Adapter
+
 LOG0 = -100
 
 
@@ -60,7 +62,7 @@ class DiagGaussianActionHead(ActionHead):
 
     LOG2PI = np.log(2.0 * np.pi)
 
-    def __init__(self, input_dim: int, num_dimensions: int):
+    def __init__(self, input_dim: int, num_dimensions: int, **kwargs):
         super().__init__()
 
         self.input_dim = input_dim
@@ -137,7 +139,14 @@ class CategoricalActionHead(ActionHead):
     """Action head with categorical actions"""
 
     def __init__(
-        self, input_dim: int, shape: Tuple[int], num_actions: int, builtin_linear_layer: bool = True, temperature: float = 1.0
+        self, 
+        input_dim: int, 
+        shape: Tuple[int], 
+        num_actions: int, 
+        builtin_linear_layer: bool = True, 
+        temperature: float = 1.0, 
+        policy_adapter: bool = False, 
+        **kwargs
     ):
         super().__init__()
 
@@ -154,6 +163,10 @@ class CategoricalActionHead(ActionHead):
             ), f"If input_dim ({input_dim}) != num_actions ({num_actions}), you need a linear layer to convert them."
             self.linear_layer = None
 
+        self.policy_adapter = policy_adapter
+        if self.policy_adapter:
+            self.adapter = Adapter(input_dim, out_size=np.prod(self.output_shape))
+
     def reset_parameters(self):
         if self.linear_layer is not None:
             init.orthogonal_(self.linear_layer.weight, gain=0.01)
@@ -165,6 +178,8 @@ class CategoricalActionHead(ActionHead):
             flat_out = self.linear_layer(input_data)
         else:
             flat_out = input_data
+        if self.policy_adapter:
+            flat_out += self.adapter(input_data, residual=False)
         shaped_out = flat_out.reshape(flat_out.shape[:-1] + self.output_shape)
         shaped_out /= self.temperature
         if mask is not None:
@@ -260,16 +275,16 @@ class DictActionHead(nn.ModuleDict):
         return sum(subhead.kl_divergence(logits_q[k], logits_p[k]) for k, subhead in self.items())
 
 
-def make_action_head(ac_space: ValType, pi_out_size: int, temperature: float = 1.0):
+def make_action_head(ac_space: ValType, pi_out_size: int, temperature: float = 1.0, **kwargs):
     """Helper function to create an action head corresponding to the environment action space"""
     if isinstance(ac_space, TensorType):
         if isinstance(ac_space.eltype, Discrete):
-            return CategoricalActionHead(pi_out_size, ac_space.shape, ac_space.eltype.n, temperature=temperature)
+            return CategoricalActionHead(pi_out_size, ac_space.shape, ac_space.eltype.n, temperature=temperature, **kwargs)
         elif isinstance(ac_space.eltype, Real):
             if temperature != 1.0:
                 logging.warning("Non-1 temperature not implemented for DiagGaussianActionHead.")
             assert len(ac_space.shape) == 1, "Nontrivial shapes not yet implemented."
-            return DiagGaussianActionHead(pi_out_size, ac_space.shape[0])
+            return DiagGaussianActionHead(pi_out_size, ac_space.shape[0], **kwargs)
     elif isinstance(ac_space, DictType):
-        return DictActionHead({k: make_action_head(v, pi_out_size, temperature) for k, v in ac_space.items()})
+        return DictActionHead({k: make_action_head(v, pi_out_size, temperature, **kwargs) for k, v in ac_space.items()})
     raise NotImplementedError(f"Action space of type {type(ac_space)} is not supported")

@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from lib import misc, mlp
 from lib import torch_util as tu
 from lib import util
+from lib.adapter import Adapter
 
 SENTINEL = 0.1337
 
@@ -334,7 +335,7 @@ class SelfAttentionLayer(AttentionLayerBase):
 
         self.use_adapters = use_adapters
         if self.use_adapters:
-            self.adapter = util.Adapter(x_size)
+            self.adapter = Adapter(x_size)
 
     def residual(self, X_bte, state):
         X_bte = self.ln_x(X_bte)
