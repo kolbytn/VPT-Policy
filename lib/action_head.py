@@ -165,7 +165,7 @@ class CategoricalActionHead(ActionHead):
 
         self.policy_adapter = policy_adapter
         if self.policy_adapter:
-            self.adapter = Adapter(input_dim, out_size=np.prod(self.output_shape))
+            self.adapter = Adapter(np.prod(self.output_shape))
 
     def reset_parameters(self):
         if self.linear_layer is not None:
@@ -179,7 +179,7 @@ class CategoricalActionHead(ActionHead):
         else:
             flat_out = input_data
         if self.policy_adapter:
-            flat_out += self.adapter(input_data, residual=False)
+            flat_out = self.adapter(flat_out)
         shaped_out = flat_out.reshape(flat_out.shape[:-1] + self.output_shape)
         shaped_out /= self.temperature
         if mask is not None:
