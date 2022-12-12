@@ -146,6 +146,7 @@ class CategoricalActionHead(ActionHead):
         builtin_linear_layer: bool = True, 
         temperature: float = 1.0, 
         policy_adapter: bool = False, 
+        policy_adapter_plus: bool = False, 
         **kwargs
     ):
         super().__init__()
@@ -164,8 +165,13 @@ class CategoricalActionHead(ActionHead):
             self.linear_layer = None
 
         self.policy_adapter = policy_adapter
+        self.policy_adapter_plus = policy_adapter_plus
+        assert not self.policy_adapter or not self.policy_adapter_plus
         if self.policy_adapter:
             self.adapter = Adapter(np.prod(self.output_shape))
+        elif policy_adapter_plus:
+            self.adapter = Adapter(input_dim+np.prod(self.output_shape), out_size=np.prod(self.output_shape))
+
 
     def reset_parameters(self):
         if self.linear_layer is not None:
@@ -180,6 +186,8 @@ class CategoricalActionHead(ActionHead):
             flat_out = input_data
         if self.policy_adapter:
             flat_out = self.adapter(flat_out)
+        elif self.policy_adapter_plus:
+            flat_out += self.adapter(torch.cat([input_data, flat_out], dim=-1), residual=False)
         shaped_out = flat_out.reshape(flat_out.shape[:-1] + self.output_shape)
         shaped_out /= self.temperature
         if mask is not None:
