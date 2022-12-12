@@ -237,7 +237,6 @@ class MinecraftPolicy(nn.Module):
 class MinecraftAgentPolicy(nn.Module):
     def __init__(self, action_space, policy_kwargs, pi_head_kwargs):
         super().__init__()
-        pi_head_kwargs["policy_adapter"] = policy_kwargs.pop("policy_adapter", False)
         self.net = MinecraftPolicy(**policy_kwargs)
 
         self.action_space = action_space
