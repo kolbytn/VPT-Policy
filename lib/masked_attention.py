@@ -128,7 +128,7 @@ class MaskedAttention(nn.Module):
         norm="none",
         log_scope="sa",
         use_muP_factor=False,
-        use_adapters=False,
+        n_adapters=0,
     ):
         super().__init__()
 
@@ -149,7 +149,7 @@ class MaskedAttention(nn.Module):
             norm=norm,
             log_scope=log_scope,
             use_muP_factor=use_muP_factor,
-            use_adapters=use_adapters
+            n_adapters=n_adapters
         )
 
     def initial_state(self, batchsize: int, device=None):
@@ -160,7 +160,7 @@ class MaskedAttention(nn.Module):
             state = tree_map(lambda x: x.to(device), state)
         return state_mask, state
 
-    def forward(self, input_bte, first_bt, state):
+    def forward(self, input_bte, first_bt, state, task_id=None):
         """Forward propagation of a single layer"""
         state_mask, xf_state = state
         t = first_bt.shape[1]
@@ -175,7 +175,7 @@ class MaskedAttention(nn.Module):
                 device=input_bte.device,
             )
             self.orc_block.attn.mask = new_mask
-        output, xf_state = self.orc_block(input_bte, xf_state)
+        output, xf_state = self.orc_block(input_bte, xf_state, task_id=task_id)
 
         return output, (state_mask, xf_state)
 

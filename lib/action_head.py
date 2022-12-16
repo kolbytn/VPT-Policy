@@ -147,6 +147,7 @@ class CategoricalActionHead(ActionHead):
         temperature: float = 1.0, 
         policy_adapter: bool = False, 
         policy_adapter_plus: bool = False, 
+        n_adapters: int = 0,
         **kwargs
     ):
         super().__init__()
@@ -164,13 +165,13 @@ class CategoricalActionHead(ActionHead):
             ), f"If input_dim ({input_dim}) != num_actions ({num_actions}), you need a linear layer to convert them."
             self.linear_layer = None
 
-        self.policy_adapter = policy_adapter
-        self.policy_adapter_plus = policy_adapter_plus
+        self.policy_adapter = policy_adapter and n_adapters > 0
+        self.policy_adapter_plus = policy_adapter_plus and n_adapters > 0
         assert not self.policy_adapter or not self.policy_adapter_plus
         if self.policy_adapter:
-            self.adapter = Adapter(np.prod(self.output_shape))
+            self.adapter = Adapter(np.prod(self.output_shape), n_tasks=n_adapters)
         elif policy_adapter_plus:
-            self.adapter = Adapter(input_dim+np.prod(self.output_shape), out_size=np.prod(self.output_shape))
+            self.adapter = Adapter(input_dim+np.prod(self.output_shape), n_tasks=n_adapters, out_size=np.prod(self.output_shape))
 
 
     def reset_parameters(self):
@@ -179,15 +180,15 @@ class CategoricalActionHead(ActionHead):
             init.constant_(self.linear_layer.bias, 0.0)
             finit.fan_in_linear(self.linear_layer, scale=0.01)
 
-    def forward(self, input_data: torch.Tensor, mask=None) -> Any:
+    def forward(self, input_data: torch.Tensor, mask=None, task_id=None) -> Any:
         if self.linear_layer is not None:
             flat_out = self.linear_layer(input_data)
         else:
             flat_out = input_data
         if self.policy_adapter:
-            flat_out = self.adapter(flat_out)
+            flat_out = self.adapter(flat_out, task_id)
         elif self.policy_adapter_plus:
-            flat_out += self.adapter(torch.cat([input_data, flat_out], dim=-1), residual=False)
+            flat_out += self.adapter(torch.cat([input_data, flat_out], dim=-1), task_id, residual=False)
         shaped_out = flat_out.reshape(flat_out.shape[:-1] + self.output_shape)
         shaped_out /= self.temperature
         if mask is not None:

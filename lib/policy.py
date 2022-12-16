@@ -125,6 +125,7 @@ class MinecraftPolicy(nn.Module):
         use_pre_lstm_ln=True,  # Not needed for transformer
         transformer_adapters=False,
         final_adapter=False,
+        n_adapters=0,
         **unused_kwargs,
     ):
         super().__init__()
@@ -185,20 +186,20 @@ class MinecraftPolicy(nn.Module):
             attention_heads=attention_heads,
             attention_memory_size=attention_memory_size,
             n_block=n_recurrence_layers,
-            use_adapters=transformer_adapters,
+            n_adapters=n_adapters if transformer_adapters else 0,
         )
 
         self.lastlayer = FanInInitReLULayer(hidsize, hidsize, layer_type="linear", **self.dense_init_norm_kwargs)
         self.final_ln = th.nn.LayerNorm(hidsize)
 
-        self.final_adapter = final_adapter
+        self.final_adapter = final_adapter and n_adapters > 0
         if self.final_adapter:
-            self.adapter = Adapter(hidsize)
+            self.adapter = Adapter(hidsize, n_tasks=n_adapters)
 
     def output_latent_size(self):
         return self.hidsize
 
-    def forward(self, ob, state_in, context):
+    def forward(self, ob, state_in, context, task_id=None):
         first = context["first"]
 
         x = self.img_preprocess(ob["img"])
@@ -212,7 +213,7 @@ class MinecraftPolicy(nn.Module):
             x = self.pre_lstm_ln(x)
 
         if self.recurrent_layer is not None:
-            x, state_out = self.recurrent_layer(x, first, state_in)
+            x, state_out = self.recurrent_layer(x, first, state_in, task_id=task_id)
         else:
             state_out = state_in
 
@@ -220,7 +221,7 @@ class MinecraftPolicy(nn.Module):
 
         x = self.lastlayer(x)
         if self.final_adapter:
-            x = self.adapter(x)
+            x = self.adapter(x, task_id)
         x = self.final_ln(x)
         pi_latent = vf_latent = x
         if self.single_output:
@@ -259,7 +260,7 @@ class MinecraftAgentPolicy(nn.Module):
         self.pi_head.reset_parameters()
         self.value_head.reset_parameters()
 
-    def forward(self, obs, first: th.Tensor, state_in):
+    def forward(self, obs, first: th.Tensor, state_in, task_id=None):
         if isinstance(obs, dict):
             # We don't want to mutate the obs input.
             obs = obs.copy()
@@ -271,9 +272,9 @@ class MinecraftAgentPolicy(nn.Module):
         else:
             mask = None
 
-        (pi_h, v_h), state_out = self.net(obs, state_in, context={"first": first})
+        (pi_h, v_h), state_out = self.net(obs, state_in, context={"first": first}, task_id=task_id)
 
-        pi_logits = self.pi_head(pi_h, mask=mask)
+        pi_logits = self.pi_head(pi_h, mask=mask, task_id={k: task_id for k in self.pi_head.keys()})
         vpred = self.value_head(v_h)
 
         return (pi_logits, vpred, None), state_out

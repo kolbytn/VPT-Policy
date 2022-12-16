@@ -113,13 +113,13 @@ class ResidualRecurrentBlocks(nn.Module):
             ]
         )
 
-    def forward(self, x, first, state):
+    def forward(self, x, first, state, task_id=None):
         state_out = []
         assert len(state) == len(
             self.blocks
         ), f"Length of state {len(state)} did not match length of blocks {len(self.blocks)}"
         for block, _s_in in zip(self.blocks, state):
-            x, _s_o = block(x, first, _s_in)
+            x, _s_o = block(x, first, _s_in, task_id=task_id)
             state_out.append(_s_o)
         return x, state_out
 
@@ -147,7 +147,7 @@ class ResidualRecurrentBlock(nn.Module):
         attention_mask_style="clipped_causal",
         log_scope="resblock",
         block_number=0,
-        use_adapters=False,
+        n_adapters=0,
     ):
         super().__init__()
         self.log_scope = f"{log_scope}{block_number}"
@@ -190,14 +190,14 @@ class ResidualRecurrentBlock(nn.Module):
                 log_scope=log_scope + "/sa",
                 use_muP_factor=True,
                 mask=attention_mask_style,
-                use_adapters=self.use_adapters
+                n_adapters=n_adapters
             )
 
-        self.use_adapters = use_adapters
+        self.use_adapters = n_adapters > 0
         if self.use_adapters:
-            self.adapter = Adapter(hidsize)
+            self.adapter = Adapter(hidsize, n_tasks=n_adapters)
 
-    def forward(self, x, first, state):
+    def forward(self, x, first, state, task_id=None):
         residual = x
         x = self.pre_r_ln(x)
         x, state_out = recurrent_forward(
@@ -206,6 +206,7 @@ class ResidualRecurrentBlock(nn.Module):
             first,
             state,
             reverse_lstm=self.recurrence_type == "multi_layer_bilstm" and (self.block_number + 1) % 2 == 0,
+            task_id=task_id
         )
         if self.is_residual and "lstm" in self.recurrence_type:  # Transformer already residual.
             x = x + residual
@@ -214,13 +215,13 @@ class ResidualRecurrentBlock(nn.Module):
             residual = x
             x = self.mlp1(self.mlp0(x))
             if self.use_adapters:
-                x = self.adapter(x)
+                x = self.adapter(x, task_id)
             if self.is_residual:
                 x = x + residual
         return x, state_out
 
 
-def recurrent_forward(module, x, first, state, reverse_lstm=False):
+def recurrent_forward(module, x, first, state, reverse_lstm=False, task_id=None):
     if isinstance(module, nn.LSTM):
         if state is not None:
             # In case recurrent models do not accept a "first" argument we zero out the hidden state here
@@ -235,7 +236,7 @@ def recurrent_forward(module, x, first, state, reverse_lstm=False):
         state_out = tree_map(lambda _s: _s.transpose(0, 1), state_out)  # B, NL, H
         return x, state_out
     else:
-        return module(x, first, state)
+        return module(x, first, state, task_id=task_id)
 
 
 def _banded_repeat(x, t):

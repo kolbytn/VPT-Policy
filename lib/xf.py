@@ -305,7 +305,7 @@ class SelfAttentionLayer(AttentionLayerBase):
         relattn=False,
         log_scope="sa",
         use_muP_factor=False,
-        use_adapters=False,
+        n_adapters=0,
         **kwargs,
     ):
         super().__init__(
@@ -333,9 +333,9 @@ class SelfAttentionLayer(AttentionLayerBase):
         self.log_scope = log_scope
         self.use_muP_factor = use_muP_factor
 
-        self.use_adapters = use_adapters
+        self.use_adapters = n_adapters > 0
         if self.use_adapters:
-            self.adapter = Adapter(x_size)
+            self.adapter = Adapter(x_size, n_tasks=n_adapters)
 
     def residual(self, X_bte, state):
         X_bte = self.ln_x(X_bte)
@@ -361,10 +361,10 @@ class SelfAttentionLayer(AttentionLayerBase):
         Aproj_bte = self.proj_layer(A_bte)
         return Aproj_bte, state
 
-    def forward(self, X_bte, state):
+    def forward(self, X_bte, state, task_id=None):
         R_bte, state = self.residual(X_bte, state)
         if self.use_adapters:
-            R_bte = self.adapter(R_bte)
+            R_bte = self.adapter(R_bte, task_id=task_id)
         return X_bte + R_bte, state
 
     def stateless_forward(self, X_bte):
