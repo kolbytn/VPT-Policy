@@ -238,15 +238,17 @@ class MinecraftPolicy(nn.Module):
 class MinecraftAgentPolicy(nn.Module):
     def __init__(self, action_space, policy_kwargs, pi_head_kwargs):
         super().__init__()
+        self.task_value_heads = policy_kwargs.pop("task_value_heads", False)
+        n_heads = policy_kwargs["n_adapters"] if "n_adapters" in policy_kwargs else 1
         self.net = MinecraftPolicy(**policy_kwargs)
 
         self.action_space = action_space
 
-        self.value_head = self.make_value_head(self.net.output_latent_size())
+        self.value_head = self.make_value_head(self.net.output_latent_size(), n_heads=n_heads)
         self.pi_head = self.make_action_head(self.net.output_latent_size(), **pi_head_kwargs)
 
-    def make_value_head(self, v_out_size: int, norm_type: str = "ewma", norm_kwargs: Optional[Dict] = None):
-        return ScaledMSEHead(v_out_size, 1, norm_type=norm_type, norm_kwargs=norm_kwargs)
+    def make_value_head(self, v_out_size: int, norm_type: str = "ewma", norm_kwargs: Optional[Dict] = None, n_heads=1):
+        return ScaledMSEHead(v_out_size, 1, norm_type=norm_type, norm_kwargs=norm_kwargs, n_heads=n_heads)
 
     def make_action_head(self, pi_out_size: int, **pi_head_opts):
         return make_action_head(self.action_space, pi_out_size, **pi_head_opts)
@@ -275,7 +277,7 @@ class MinecraftAgentPolicy(nn.Module):
         (pi_h, v_h), state_out = self.net(obs, state_in, context={"first": first}, task_id=task_id)
 
         pi_logits = self.pi_head(pi_h, mask=mask, task_id={k: task_id for k in self.pi_head.keys()})
-        vpred = self.value_head(v_h)
+        vpred = self.value_head(v_h, task_id if self.task_value_heads else None)
 
         return (pi_logits, vpred, None), state_out
 
