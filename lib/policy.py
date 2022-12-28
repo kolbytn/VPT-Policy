@@ -239,7 +239,7 @@ class MinecraftAgentPolicy(nn.Module):
     def __init__(self, action_space, policy_kwargs, pi_head_kwargs):
         super().__init__()
         self.task_value_heads = policy_kwargs.pop("task_value_heads", False)
-        n_heads = policy_kwargs["n_adapters"] if "n_adapters" in policy_kwargs else 1
+        n_heads = policy_kwargs["n_adapters"] if "n_adapters" in policy_kwargs and self.task_value_heads else 1
         self.net = MinecraftPolicy(**policy_kwargs)
 
         self.action_space = action_space

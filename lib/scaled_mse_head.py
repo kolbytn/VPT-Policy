@@ -48,9 +48,12 @@ class ScaledMSEHead(nn.Module):
         assert len(head_id) == input_data.shape[0]
         out = []
         for i in range(len(head_id)):
-            assert head_id[i] >= 0 and head_id[i] < len(self.linear), \
-                "Found out of range head id {}. Expected range [0, {}).".format(head_id, len(self.linear))
-            out.append(self.linear[head_id[i]](input_data[i:i+1]))
+            if head_id[i] == -1:
+                out.append(th.zeros_like(self.linear[head_id[0]](input_data[i:i+1])))  # Fix this without forward pass
+            else:
+                assert head_id[i] >= 0 and head_id[i] < len(self.linear), \
+                    "Found out of range head id {}. Expected range [0, {}).".format(head_id, len(self.linear))
+                out.append(self.linear[head_id[i]](input_data[i:i+1]))
 
         return th.cat(out, dim=0)
 
