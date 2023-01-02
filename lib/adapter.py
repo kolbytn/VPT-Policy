@@ -60,5 +60,8 @@ class Adapter(nn.Module):
             else:
                 assert task_id[i] >= 0 and task_id[i] < len(self.task_adapters), \
                     "Found out of range task id {}. Expected range [0, {}).".format(task_id, len(self.task_adapters))
-                out.append(self.task_adapters[task_id[i]](x[i:i+1], residual=residual, extra=extra))
+                extra_task = extra
+                if extra is not None:
+                    extra_task = extra[i:i+1]
+                out.append(self.task_adapters[task_id[i]](x[i:i+1], residual=residual, extra=extra_task))
         return th.cat(out, dim=0)
