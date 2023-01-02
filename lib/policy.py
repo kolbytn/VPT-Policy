@@ -125,6 +125,7 @@ class MinecraftPolicy(nn.Module):
         use_pre_lstm_ln=True,  # Not needed for transformer
         transformer_adapters=False,
         final_adapter=False,
+        adapter_factor: float = 16,
         n_adapters=0,
         **unused_kwargs,
     ):
@@ -186,6 +187,7 @@ class MinecraftPolicy(nn.Module):
             attention_heads=attention_heads,
             attention_memory_size=attention_memory_size,
             n_block=n_recurrence_layers,
+            adapter_factor=adapter_factor,
             n_adapters=n_adapters if transformer_adapters else 0,
         )
 

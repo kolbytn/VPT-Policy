@@ -147,6 +147,7 @@ class ResidualRecurrentBlock(nn.Module):
         attention_mask_style="clipped_causal",
         log_scope="resblock",
         block_number=0,
+        adapter_factor=16,
         n_adapters=0,
     ):
         super().__init__()
@@ -190,12 +191,13 @@ class ResidualRecurrentBlock(nn.Module):
                 log_scope=log_scope + "/sa",
                 use_muP_factor=True,
                 mask=attention_mask_style,
+                adapter_factor=adapter_factor,
                 n_adapters=n_adapters
             )
 
         self.use_adapters = n_adapters > 0
         if self.use_adapters:
-            self.adapter = Adapter(hidsize, n_tasks=n_adapters)
+            self.adapter = Adapter(hidsize, n_tasks=n_adapters, reduction_factor=adapter_factor)
 
     def forward(self, x, first, state, task_id=None):
         residual = x

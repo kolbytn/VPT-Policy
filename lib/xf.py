@@ -305,6 +305,7 @@ class SelfAttentionLayer(AttentionLayerBase):
         relattn=False,
         log_scope="sa",
         use_muP_factor=False,
+        adapter_factor=16,
         n_adapters=0,
         **kwargs,
     ):
@@ -335,7 +336,7 @@ class SelfAttentionLayer(AttentionLayerBase):
 
         self.use_adapters = n_adapters > 0
         if self.use_adapters:
-            self.adapter = Adapter(x_size, n_tasks=n_adapters)
+            self.adapter = Adapter(x_size, n_tasks=n_adapters, reduction_factor=adapter_factor)
 
     def residual(self, X_bte, state):
         X_bte = self.ln_x(X_bte)
