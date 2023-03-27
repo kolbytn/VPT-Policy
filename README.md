@@ -1,6 +1,6 @@
 # VPT-Policy
 
-This fork of `Video-Pre-Training` removes all dependencies on `minerl` by removing the `run_agent` and `behavioural_cloning` scripts. We also copy the `mc_constants.1.16.json` file from the minerl repo to be used by the `lib.actions` module.
+This fork of `Video-Pre-Training` removes all dependencies on `minerl` and introduces transformer adapters for finetuning VPT.
 
 # Video-Pre-Training
 Video PreTraining (VPT): Learning to Act by Watching Unlabeled Online Videos
